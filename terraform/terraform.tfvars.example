@@ -1,0 +1,6 @@
+project_id             = "mi-proyecto-gcp"
+region                 = "us-central1"
+min_instances          = 1
+max_instances          = 5
+allow_unauthenticated  = false
+enable_gke_backends    = true

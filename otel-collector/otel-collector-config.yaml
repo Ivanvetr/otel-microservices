@@ -1,0 +1,84 @@
+# Configuración del OTel Collector (Fase 2)
+# receiver OTLP (gRPC + HTTP) -> processors (memory_limiter + batch + resource)
+# -> exporters: Jaeger (trazas), Prometheus (métricas), Loki vía OTLP (logs)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Debe ir primero en cada pipeline: protege al Collector de quedarse sin memoria
+  # bajo carga alta (relevante para el benchmark de la Fase 4).
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Enriquecimiento de contexto de despliegue, homogéneo para los tres pilares.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local-docker-compose
+        action: upsert
+      - key: collector.name
+        value: otel-collector
+        action: upsert
+
+  # Agrupa spans/métricas/logs antes de exportar, reduciendo el número de
+  # llamadas de red hacia los backends.
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+exporters:
+  # Trazas -> Jaeger (recibe OTLP nativamente desde Jaeger 1.35+)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Métricas -> endpoint de scrape para Prometheus
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Logs -> Loki vía su endpoint nativo OTLP (equivalente local a Cloud Logging/CloudWatch)
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    # Métricas internas del propio Collector (CPU, memoria, spans rechazados, etc.)
+    # usadas en el panel "errores OTel Collector" del dashboard de Grafana.
+    metrics:
+      address: 0.0.0.0:8888
+      level: detailed
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/loki, debug]

@@ -1,0 +1,24 @@
+# values.yaml para el chart prometheus-community/prometheus
+# Referencia: https://github.com/prometheus-community/helm-charts
+
+server:
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+  retention: "15d"
+
+  # Scrape adicional: el OTel Collector corre en Cloud Run (fuera del clúster),
+  # se scrapea por HTTPS usando la URL pública de salida de Terraform
+  # (otel_collector_url). Sustituir <OTEL_COLLECTOR_CLOUD_RUN_HOST> antes de aplicar.
+  extraScrapeConfigs: |
+    - job_name: 'otel-collector-cloudrun'
+      scheme: https
+      metrics_path: /metrics
+      static_configs:
+        - targets: ['<OTEL_COLLECTOR_CLOUD_RUN_HOST>']
+
+alertmanager:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false

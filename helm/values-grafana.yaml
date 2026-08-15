@@ -1,0 +1,68 @@
+# values.yaml para el chart grafana/grafana
+# Referencia: https://github.com/grafana/helm-charts/tree/main/charts/grafana
+#
+# Reutiliza exactamente la misma configuración de datasources y el mismo
+# dashboard JSON (6 paneles) que ../grafana/provisioning, para que el
+# comportamiento sea idéntico entre el entorno local (docker-compose) y GKE.
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+service:
+  type: LoadBalancer
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-server.observability.svc.cluster.local
+        isDefault: true
+
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger-query.observability.svc.cluster.local:16686
+        uid: jaeger-uid
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            filterByTraceID: true
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.observability.svc.cluster.local:3100
+        uid: loki
+        jsonData:
+          derivedFields:
+            - datasourceUid: jaeger-uid
+              matcherRegex: "trace_id\"?[:=]\\s?\"?([0-9a-f]+)"
+              name: TraceID
+              url: "$${__value.raw}"
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: "otel-observability"
+        orgId: 1
+        folder: "Observabilidad"
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards/otel-observability
+
+dashboardsConfigMaps:
+  otel-observability: "grafana-otel-dashboard"
+
+# El ConfigMap "grafana-otel-dashboard" se crea a partir del mismo archivo
+# ../grafana/provisioning/dashboards/json/observabilidad-dashboard.json:
+#
+#   kubectl create configmap grafana-otel-dashboard \
+#     --namespace observability \
+#     --from-file=observabilidad-dashboard.json=../grafana/provisioning/dashboards/json/observabilidad-dashboard.json

@@ -1,0 +1,103 @@
+{
+  "title": "Observabilidad OTel - service-a / service-b",
+  "uid": "otel-observability-main",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLI 1 - Latencia p95 de transferencias (service-a -> service-b)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(service_a_transfer_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 transfer duration"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(service_a_transfer_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99 transfer duration"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "title": "SLI 2 - Tasa de errores de negocio (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(service_a_transfer_errors_total[5m])) / clamp_min(sum(rate(service_a_transfers_total[5m])) + sum(rate(service_a_transfer_errors_total[5m])), 1)",
+          "legendFormat": "% errores transferencias"
+        },
+        {
+          "expr": "100 * sum(rate(service_b_errors_total[5m])) / clamp_min(sum(rate(service_b_requests_total[5m])), 1)",
+          "legendFormat": "% errores service-b"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "title": "SLI 3 - Throughput (requests/seg)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(service_a_transfers_total[1m]))", "legendFormat": "transferencias/s" },
+        { "expr": "sum(rate(service_b_requests_total[1m])) by (endpoint)", "legendFormat": "{{endpoint}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "title": "SLI 4 - Disponibilidad de los targets scrapeados",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "avg(up{job=~\"otel-collector.*\"}) * 100", "legendFormat": "% disponibilidad" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 99 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "CPU del OTel Collector",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "rate(otelcol_process_cpu_seconds[1m])", "legendFormat": "CPU seconds/s" },
+        { "expr": "otelcol_process_memory_rss", "legendFormat": "RSS bytes" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "title": "Errores del OTel Collector (spans/logs/métricas rechazados o fallidos)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(otelcol_receiver_refused_spans[5m]))", "legendFormat": "spans rechazados (receiver)" },
+        { "expr": "sum(rate(otelcol_exporter_send_failed_spans[5m]))", "legendFormat": "spans fallidos (exporter)" },
+        { "expr": "sum(rate(otelcol_processor_refused_spans[5m]))", "legendFormat": "spans rechazados (processor)" },
+        { "expr": "sum(rate(otelcol_exporter_send_failed_log_records[5m]))", "legendFormat": "logs fallidos (exporter)" },
+        { "expr": "sum(rate(otelcol_exporter_send_failed_metric_points[5m]))", "legendFormat": "métricas fallidas (exporter)" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    }
+  ]
+}
