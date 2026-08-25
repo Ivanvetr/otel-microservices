@@ -113,9 +113,9 @@ story.append(Spacer(1, 2 * cm))
 story.append(Paragraph("Universidad de La Sabana — Maestría en Arquitectura de Software", styles["SubTitle"]))
 story.append(Paragraph("Observabilidad en ambientes productivos", styles["SubTitle"]))
 story.append(Spacer(1, 1 * cm))
-story.append(Paragraph("Iván Vera", styles["SubTitle"]))
+story.append(Paragraph("Leonardo Pérez — Juan Felipe González Iván Vera", styles["SubTitle"]))
 story.append(Spacer(1, 3 * cm))
-story.append(Paragraph("15 de agosto de 2026", styles["SubTitle"]))
+story.append(Paragraph("24 de agosto de 2026", styles["SubTitle"]))
 story.append(PageBreak())
 
 # ============================== 1. INTRODUCCIÓN ==============================
