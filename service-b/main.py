@@ -36,6 +36,9 @@ debit_amount_hist = meter.create_histogram(
     "service_b_debit_amount", description="Monto de los débitos procesados"
 )
 
+# --- estado del experimento de caos (Módulo D): latencia inyectada configurable en runtime ---
+CHAOS_STATE = {"latency_enabled": False, "latency_ms": 200}
+
 
 def init_db():
     with engine.begin() as conn:
@@ -81,6 +84,30 @@ class BalanceResponse(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "service-b"}
+
+
+class ChaosConfig(BaseModel):
+    enabled: bool
+    latency_ms: int = 200
+
+
+@app.post("/chaos/latency")
+def set_chaos_latency(config: ChaosConfig):
+    """Interruptor del experimento de caos #1 (Módulo D): +200ms de latencia en service-b."""
+    CHAOS_STATE["latency_enabled"] = config.enabled
+    CHAOS_STATE["latency_ms"] = config.latency_ms
+    log.warning("chaos toggle actualizado", extra=dict(CHAOS_STATE))
+    return dict(CHAOS_STATE)
+
+
+@app.get("/chaos/status")
+def get_chaos_status():
+    return dict(CHAOS_STATE)
+
+
+def _maybe_inject_chaos_latency():
+    if CHAOS_STATE["latency_enabled"]:
+        time.sleep(CHAOS_STATE["latency_ms"] / 1000)
 
 
 @app.get("/accounts/{account_id}/balance", response_model=BalanceResponse)
@@ -131,6 +158,7 @@ def debit_account(account_id: str, req: DebitRequest):
 
         # simula variabilidad de carga real en la capa de negocio
         time.sleep(random.uniform(0.005, 0.02))
+        _maybe_inject_chaos_latency()
 
         t0 = time.time()
         with engine.begin() as conn:
@@ -176,6 +204,7 @@ def credit_account(account_id: str, req: DebitRequest):
     with tracer.start_as_current_span("apply_credit_business_rules") as span:
         span.set_attribute("account.id", account_id)
         span.set_attribute("credit.amount", req.amount)
+        _maybe_inject_chaos_latency()
 
         t0 = time.time()
         with engine.begin() as conn:

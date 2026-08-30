@@ -1,0 +1,9 @@
+{
+  "experiment": "error-rate",
+  "expected_alert": "DataServiceErrorRateSLOBreach",
+  "injected_at": "2026-08-30T20:43:36.040186+00:00",
+  "detected_at": "2026-08-30T20:45:55.332000+00:00",
+  "mttd_seconds": 139.291814,
+  "mttd_target_seconds": 120,
+  "mttd_within_target": false
+}

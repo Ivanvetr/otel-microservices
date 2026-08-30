@@ -60,3 +60,74 @@ variable "enable_gke_backends" {
   type        = bool
   default     = false
 }
+
+# ---------------------------------------------------------------------------
+# Módulo A — data-service: Cloud SQL (GCP) + RDS (AWS)
+# ---------------------------------------------------------------------------
+variable "aws_region" {
+  description = "Región de AWS donde se despliega RDS/VPC Flow Logs/Security Hub."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "enable_data_service_databases" {
+  description = "Si es true, aprovisiona las instancias reales de Cloud SQL (GCP) y RDS (AWS) para data-service. En false, se documenta el IaC pero se sigue trabajando localmente contra los Postgres de docker-compose."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_tier" {
+  description = "Tier de la instancia de Cloud SQL para Postgres (data-service)."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "cloudsql_db_password" {
+  description = "Password del usuario de aplicación en Cloud SQL."
+  type        = string
+  sensitive   = true
+  default     = "changeme-cloudsql"
+}
+
+variable "rds_instance_class" {
+  description = "Clase de instancia de RDS Postgres (data-service)."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "rds_db_password" {
+  description = "Password del usuario de aplicación en RDS."
+  type        = string
+  sensitive   = true
+  default     = "changeme-rds"
+}
+
+# ---------------------------------------------------------------------------
+# Módulo C — Network & Security Observability
+# ---------------------------------------------------------------------------
+variable "enable_network_security" {
+  description = "Si es true, aprovisiona VPC Flow Logs (GCP/AWS) y Security Hub/SCC. En false, solo queda documentado el IaC."
+  type        = bool
+  default     = false
+}
+
+variable "vpc_network_name" {
+  description = "Nombre de la VPC de GCP donde se habilitan los Flow Logs."
+  type        = string
+  default     = "otel-observability-vpc"
+}
+
+# ---------------------------------------------------------------------------
+# Módulo B — AIOps: Anomaly Detection (GCP) / DevOps Guru (AWS)
+# ---------------------------------------------------------------------------
+variable "enable_aiops" {
+  description = "Si es true, aprovisiona la política de Cloud Monitoring Anomaly Detection y habilita DevOps Guru. En false, solo queda documentado el IaC (el equivalente funcional local es aiops/anomaly_detector.py)."
+  type        = bool
+  default     = false
+}
+
+variable "notification_channel_email" {
+  description = "Email al que se notifican las alertas de Cloud Monitoring (Módulo B)."
+  type        = string
+  default     = "observability-team@example.com"
+}

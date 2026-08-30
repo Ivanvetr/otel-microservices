@@ -1,0 +1,97 @@
+{
+  "title": "Golden Signals de Seguridad — Módulo C",
+  "uid": "security-golden-signals",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Intentos de autenticación fallidos (data-service)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(data_service_auth_failed_total[5m]))",
+          "legendFormat": "auth fallida/s"
+        },
+        {
+          "expr": "sum(rate(data_service_auth_success_total[5m]))",
+          "legendFormat": "auth exitosa/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "title": "% de intentos de autenticación fallidos",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(data_service_auth_failed_total[5m])) / clamp_min(sum(rate(data_service_auth_failed_total[5m])) + sum(rate(data_service_auth_success_total[5m])), 1)",
+          "legendFormat": "% fallidos"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Tráfico Norte-Sur (cliente externo -> Envoy) vs Este-Oeste (Envoy -> microservicio)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_total[5m]))",
+          "legendFormat": "N-S (downstream, entrada al mesh)"
+        },
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_rq_completed[5m]))",
+          "legendFormat": "E-W (upstream, entre microservicios)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "title": "Respuestas 5xx a nivel de mesh (posible tráfico anómalo/ataque)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"5\"}[5m]))",
+          "legendFormat": "5xx / s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "title": "CVEs activos por imagen (Trivy -> Pushgateway)",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "description": "Requiere ejecutar security/scan_images.py (Trivy) al menos una vez; ver security/README.md.",
+      "targets": [
+        {
+          "expr": "sum(image_active_cves) by (image, severity)",
+          "legendFormat": "{{image}} - {{severity}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    }
+  ]
+}

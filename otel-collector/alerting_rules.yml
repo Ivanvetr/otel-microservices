@@ -1,0 +1,42 @@
+# Reglas de alerta (Módulo B: comparación AIOps vs. umbrales estáticos; Módulo D: SLO de los
+# experimentos de caos, usadas para medir MTTD desde Alertmanager).
+groups:
+  - name: static-thresholds-noisy
+    rules:
+      - alert: DataServiceHighErrorRateStatic
+        expr: (sum(rate(data_service_errors_total[1m])) / clamp_min(sum(rate(data_service_requests_total[1m])), 1)) > 0.02
+        for: 0m
+        labels:
+          severity: warning
+          rule_type: static_threshold
+        annotations:
+          summary: "data-service: error_rate > 2% (umbral estático clásico, sin baseline ni correlación)"
+
+      - alert: ServiceBHighLatencyStatic
+        expr: histogram_quantile(0.99, sum(rate(service_a_transfer_duration_seconds_bucket[1m])) by (le)) > 0.15
+        for: 0m
+        labels:
+          severity: warning
+          rule_type: static_threshold
+        annotations:
+          summary: "transferencias service-a->service-b: p99 > 150ms (umbral estático clásico)"
+
+  - name: slo-chaos-experiments
+    rules:
+      - alert: TransferLatencySLOBreach
+        expr: histogram_quantile(0.99, sum(rate(service_a_transfer_duration_seconds_bucket[1m])) by (le)) > 0.3
+        for: 30s
+        labels:
+          severity: critical
+          rule_type: slo_chaos
+        annotations:
+          summary: "Experimento de caos #1: p99 de transferencias > 300ms (SLO). Posible latencia inyectada en service-b."
+
+      - alert: DataServiceErrorRateSLOBreach
+        expr: (sum(rate(data_service_errors_total[1m])) / clamp_min(sum(rate(data_service_requests_total[1m])), 1)) > 0.08
+        for: 30s
+        labels:
+          severity: critical
+          rule_type: slo_chaos
+        annotations:
+          summary: "Experimento de caos #2: error_rate de data-service > 8% (error budget del SLO). Posible fallo inyectado."
