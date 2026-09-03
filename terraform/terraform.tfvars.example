@@ -4,3 +4,13 @@ min_instances          = 1
 max_instances          = 5
 allow_unauthenticated  = false
 enable_gke_backends    = true
+
+# Módulo A/B/C — apagados por defecto (laboratorio validado 100% local en Docker).
+# Cambiar a true junto con credenciales reales de AWS/GCP para aplicar contra la nube.
+aws_region                     = "us-east-1"
+enable_data_service_databases  = false
+enable_network_security        = false
+enable_aiops                   = false
+cloudsql_db_password           = "changeme-cloudsql"
+rds_db_password                = "changeme-rds"
+notification_channel_email     = "observability-team@example.com"

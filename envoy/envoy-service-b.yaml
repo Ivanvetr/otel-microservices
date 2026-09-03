@@ -1,0 +1,62 @@
+# Sidecar Envoy delante de service-b: simulación local de "service mesh básico" (Módulo A)
+# equivalente a Cloud Service Mesh (GCP) / AWS App Mesh, dando observabilidad L7:
+# - métricas de requests/latencia/códigos de respuesta por Envoy (admin :9901/stats/prometheus)
+# - access logs estructurados con duración y código de respuesta
+# - política básica de resiliencia (retries, timeout) a nivel de malla, no de código de app
+static_resources:
+  listeners:
+    - name: listener_service_b
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 10000 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: mesh_service_b
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          time: "%START_TIME%"
+                          upstream: "service-b"
+                          method: "%REQ(:METHOD)%"
+                          path: "%REQ(:PATH)%"
+                          response_code: "%RESPONSE_CODE%"
+                          duration_ms: "%DURATION%"
+                          upstream_host: "%UPSTREAM_HOST%"
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: service_b
+                      domains: ["*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: service_b_cluster
+                            timeout: 10s
+                            retry_policy:
+                              retry_on: "5xx"
+                              num_retries: 2
+                              per_try_timeout: 3s
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: service_b_cluster
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: service_b_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: service-b, port_value: 8000 }
+
+admin:
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }

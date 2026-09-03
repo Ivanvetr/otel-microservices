@@ -1,0 +1,12 @@
+route:
+  receiver: default
+  group_by: ["alertname", "service"]
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 5m
+
+receivers:
+  - name: default
+    # Sin integraciones externas (Slack/email) para mantener el laboratorio 100% local.
+    # Las alertas quedan visibles en http://localhost:9093 y son consultables vía API
+    # (usadas por chaos/run_chaos_experiment.py para medir el MTTD del Módulo D).

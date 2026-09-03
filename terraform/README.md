@@ -1,33 +1,50 @@
-# IaC (Terraform) — OTel Collector en GCP Cloud Run
+# IaC (Terraform) — OTel Collector, data-service (Cloud SQL/RDS), service mesh, AIOps y Network/Security en GCP + AWS
 
-> **Nota de alcance**: este código no fue aplicado contra un proyecto real de GCP
-> (el entorno de desarrollo no tenía credenciales de nube disponibles). Es código
+> **Nota de alcance**: este código no fue aplicado contra un proyecto real de GCP/cuenta de
+> AWS (el entorno de desarrollo no tenía credenciales de nube disponibles). Es código
 > Terraform válido y completo, listo para `terraform init/plan/apply` una vez se
 > cuente con un proyecto de GCP y credenciales (`gcloud auth application-default login`
 > o una Service Account con los roles `roles/run.admin`, `roles/iam.serviceAccountAdmin`,
 > `roles/secretmanager.admin`, `roles/artifactregistry.admin` y, si `enable_gke_backends
-> = true`, `roles/container.admin`).
+> = true`, `roles/container.admin`) y credenciales de AWS (`aws configure` / variables
+> `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`). La evidencia funcional de los módulos B-D
+> de la actividad se generó 100% en local con Docker (ver README raíz y las carpetas
+> `aiops/`, `security/`, `chaos/`).
 
 ## Qué provisiona
 
-1. Habilita las APIs necesarias (`run`, `secretmanager`, `artifactregistry`, `container`).
-2. Sube `../otel-collector/otel-collector-config.yaml` a Secret Manager.
-3. Crea una Service Account dedicada para el Collector con acceso de solo lectura al secreto.
-4. Despliega el OTel Collector (`otel/opentelemetry-collector-contrib`) en **Cloud Run v2**,
-   con el receiver OTLP gRPC como puerto de ingreso.
-5. (Opcional, `enable_gke_backends = true`) Crea un clúster **GKE Autopilot** donde se
-   despliegan Jaeger, Prometheus y Grafana vía Helm (ver `../helm`).
+1. **Fase 2 (`main.tf`)**: habilita APIs, sube la config del Collector a Secret Manager,
+   despliega el Collector en Cloud Run v2 y (opcional) un clúster GKE Autopilot para los
+   backends con estado (ver `../helm`).
+2. **Módulo A — `cloudsql.tf` / `rds.tf`**: Cloud SQL Postgres (GCP) y RDS Postgres (AWS)
+   para `data-service`, gated por `enable_data_service_databases` (default `false`; el
+   equivalente local son los contenedores `postgres`/`postgres-aws` en `../docker-compose.yml`).
+3. **Módulo A — `service_mesh.tf`**: habilitación de Cloud Service Mesh (GCP, sobre el
+   clúster GKE opcional) y un `aws_appmesh_mesh` (AWS). La observabilidad L7 equivalente y
+   verificable en este entorno son los sidecars Envoy locales (`../envoy/*.yaml`).
+4. **Módulo B — `aiops.tf`**: política de Cloud Monitoring Anomaly Detection (MQL,
+   error_rate + latencia) y AWS DevOps Guru, gated por `enable_aiops`. El equivalente
+   local funcional es `../aiops/anomaly_detector.py`.
+5. **Módulo C — `network_security.tf`**: VPC + Flow Logs (GCP), alerta de tráfico E-W
+   anómalo, VPC Flow Logs a CloudWatch (AWS), Security Hub (AWS) y notificación de
+   Security Command Center (GCP), gated por `enable_network_security`. El equivalente
+   local funcional está en `../security/`.
 
 ## Uso
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# editar project_id, region, etc.
+# editar project_id, region, aws_region, y los enable_* según lo que se vaya a aplicar
 
 terraform init
 terraform plan
 terraform apply
 ```
+
+Los flags `enable_data_service_databases`, `enable_network_security` y `enable_aiops`
+están en `false` por defecto para que `terraform plan` no intente crear recursos con costo
+en una cuenta real sin decisión explícita del equipo.
+
 
 ## Decisiones de diseño relevantes para el informe técnico
 

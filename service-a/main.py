@@ -11,6 +11,7 @@ from opentelemetry.trace import Status, StatusCode
 from telemetry import tracer, meter, log
 
 SERVICE_B_URL = os.getenv("SERVICE_B_URL", "http://service-b:8000")
+DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://data-service:8000")
 
 app = FastAPI(title="service-a")
 
@@ -19,6 +20,7 @@ FastAPIInstrumentor.instrument_app(app)
 HTTPXClientInstrumentor().instrument()
 
 client = httpx.Client(base_url=SERVICE_B_URL, timeout=10.0)
+data_service_client = httpx.Client(base_url=DATA_SERVICE_URL, timeout=5.0)
 
 # --- métricas custom ---
 transfer_counter = meter.create_counter(
@@ -104,6 +106,16 @@ def transfer(req: TransferRequest):
             extra={"to_account": req.to_account, "status_code": e.response.status_code},
         )
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+
+    # --- Módulo A: 3er microservicio (data-service) -> completa la traza distribuida a 3 saltos ---
+    # No es crítico para el negocio: si data-service falla, la transferencia ya se completó.
+    try:
+        data_service_client.post(
+            "/records/gcp",
+            json={"account_id": req.from_account, "event_type": "transfer_audit", "amount": req.amount},
+        )
+    except httpx.HTTPError as exc:
+        log.warning("no se pudo registrar auditoría en data-service", extra={"error": str(exc)})
 
     elapsed = time.time() - t0
     transfer_counter.add(1)

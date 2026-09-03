@@ -15,6 +15,24 @@ services:
       retries: 10
     networks: [otel-net]
 
+  # Simulación local de AWS RDS (Módulo A): data-service la usa como segunda base de datos
+  # gestionada, separada de "postgres" (que simula GCP Cloud SQL).
+  postgres-aws:
+    image: postgres:16-alpine
+    container_name: postgres-aws
+    environment:
+      POSTGRES_USER: otel
+      POSTGRES_PASSWORD: otel
+      POSTGRES_DB: rds_demo
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U otel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [otel-net]
+
   jaeger:
     image: jaegertracing/all-in-one:1.60
     container_name: jaeger
@@ -57,13 +75,38 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
     volumes:
       - ./otel-collector/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./otel-collector/alerting_rules.yml:/etc/prometheus/alerting_rules.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
       - otel-collector
+    networks: [otel-net]
+
+  # Módulo B (AIOps): Alertmanager recibe tanto las reglas clásicas de Prometheus (umbral
+  # estático + SLO de los experimentos de caos) como las alertas enriquecidas con trace_id
+  # que empuja aiops-anomaly-detector directamente vía su API v2.
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    volumes:
+      - ./otel-collector/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "9093:9093"
+    networks: [otel-net]
+
+  # Módulo C: recibe las métricas de CVEs activos publicadas por security/scan_images.py (Trivy).
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    container_name: pushgateway
+    ports:
+      - "9091:9091"
     networks: [otel-net]
 
   grafana:
@@ -105,13 +148,89 @@ services:
     environment:
       OTEL_SERVICE_NAME: service-a
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      SERVICE_B_URL: http://service-b:8000
+      # Módulo A: el tráfico pasa por los sidecars Envoy (service mesh local) en vez de ir
+      # directo a service-b/data-service, para que las métricas L7 del mesh sean reales.
+      SERVICE_B_URL: http://envoy-service-b:10000
+      DATA_SERVICE_URL: http://envoy-data-service:10000
       DEPLOYMENT_ENV: local
     ports:
       - "8001:8000"
     depends_on:
       - service-b
+      - data-service
+      - envoy-service-b
+      - envoy-data-service
       - otel-collector
+    networks: [otel-net]
+
+  # Módulo A: tercer microservicio, accede a dos bases de datos gestionadas simuladas
+  # (GCP Cloud SQL vía `postgres`, AWS RDS vía `postgres-aws`). Ver terraform/cloudsql.tf
+  # y terraform/rds.tf para el equivalente real en la nube.
+  data-service:
+    build: ./data-service
+    container_name: data-service
+    environment:
+      OTEL_SERVICE_NAME: data-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      CLOUDSQL_DATABASE_URL: postgresql+psycopg2://otel:otel@postgres:5432/otel_demo
+      RDS_DATABASE_URL: postgresql+psycopg2://otel:otel@postgres-aws:5432/rds_demo
+      DEPLOYMENT_ENV: local
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-aws:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    networks: [otel-net]
+
+  # Módulo A: service mesh básico (simulación local de Cloud Service Mesh / AWS App Mesh)
+  # -> sidecars Envoy delante de service-b y data-service con observabilidad L7 (métricas,
+  # access logs, retries). Prometheus scrapea sus stats en el job "envoy-service-mesh".
+  envoy-service-b:
+    image: envoyproxy/envoy:v1.31-latest
+    container_name: envoy-service-b
+    volumes:
+      - ./envoy/envoy-service-b.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "8102:10000"
+      - "9911:9901"
+    depends_on:
+      - service-b
+    networks: [otel-net]
+
+  envoy-data-service:
+    image: envoyproxy/envoy:v1.31-latest
+    container_name: envoy-data-service
+    volumes:
+      - ./envoy/envoy-data-service.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "8103:10000"
+      - "9912:9901"
+    depends_on:
+      - data-service
+    networks: [otel-net]
+
+  # Módulo B (AIOps): detección de anomalías (baseline + 2 sigma) y correlación con trace_id.
+  aiops-anomaly-detector:
+    build: ./aiops
+    container_name: aiops-anomaly-detector
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      JAEGER_URL: http://jaeger:16686
+      ALERTMANAGER_URL: http://alertmanager:9093
+      AIOPS_TARGET_SERVICE: data-service
+    volumes:
+      - aiops-results:/app/results
+    ports:
+      - "8500:8000"
+    depends_on:
+      - prometheus
+      - jaeger
+      - alertmanager
+      - data-service
     networks: [otel-net]
 
 networks:
@@ -121,3 +240,4 @@ networks:
 volumes:
   prometheus-data:
   loki-data:
+  aiops-results:

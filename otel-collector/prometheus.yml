@@ -2,14 +2,38 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "/etc/prometheus/alerting_rules.yml"
+
 scrape_configs:
   # Métricas internas del Collector (CPU, memoria, spans/logs/métricas rechazados)
   - job_name: "otel-collector-internal"
     static_configs:
       - targets: ["otel-collector:8888"]
 
-  # Métricas de negocio/aplicación reenviadas por service-a y service-b vía OTLP
+  # Métricas de negocio/aplicación reenviadas por service-a, service-b y data-service vía OTLP
   # y re-expuestas por el Collector en formato Prometheus.
   - job_name: "otel-collector-app-metrics"
     static_configs:
       - targets: ["otel-collector:8889"]
+
+  # Módulo A: observabilidad L7 del "service mesh" local (sidecars Envoy delante de
+  # service-b y data-service). Envoy expone sus stats nativamente en formato Prometheus.
+  - job_name: "envoy-service-mesh"
+    metrics_path: /stats/prometheus
+    static_configs:
+      - targets: ["envoy-service-b:9901", "envoy-data-service:9901"]
+        labels:
+          mesh_component: "envoy-sidecar"
+
+  # Módulo C: CVEs activos publicados por security/scan_images.py (Trivy) vía Pushgateway.
+  - job_name: "pushgateway"
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
